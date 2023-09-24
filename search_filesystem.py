@@ -2,55 +2,37 @@
 import os
 import sys
 import time
-import argparse
 
-def search_filesystem(target, maxdepth=None):
-    # Define directories to exclude
-    exclude_dirs = set([
-        "/proc",
-        "/sys",
-        "/mnt",
-        "/dev",
-        "/snap",
-        "/var",
-        "/.git",  # Exclude .git directories to avoid git bottlenecks
-    ])
-    
-    # Walk through the filesystem starting from the root directory
-    for root, dirs, files in os.walk("/", topdown=True):
-        # Modify dirs in-place to skip excluded directories
-        dirs[:] = [d for d in dirs if os.path.join(root, d) not in exclude_dirs]
-        
-        # Calculate the current depth
+def is_excluded_directory(dir):
+    excluded_directories = ['/proc', '/sys', '/mnt', '/dev', '/snap', '/var', '.git']
+    for excluded_dir in excluded_directories:
+        if dir.startswith(excluded_dir):
+            return True
+    return False
+
+def search_filesystem(target, max_depth, root='/'):
+    for root, dirs, files in os.walk(root):
         depth = root.count(os.path.sep)
-        
-        # Skip directories deeper than maxdepth
-        if maxdepth is not None and depth > maxdepth:
+        if depth > max_depth:
             del dirs[:]
             continue
-        
-        # Start the timer
-        start_time = time.time()
-        
-        # Check if the current directory name matches the target
-        if os.path.basename(root) == target:
-            print(root)
-        
-        # Check if any file in the current directory matches the target
-        for file in files:
-            if file == target:
-                print(os.path.join(root, file))
-        
-        # End the timer and check the elapsed time
-        elapsed_time = time.time() - start_time
-        if elapsed_time > 1:
-            print(f"Searching in {root} took {elapsed_time:.2f} seconds")
+        if is_excluded_directory(root):
+            del dirs[:]
+            continue
+        if target in files or target in dirs:
+            print(os.path.join(root, target))
+        for dir in dirs:
+            start_time = time.time()
+            if os.path.isdir(os.path.join(root, dir)):
+                if time.time() - start_time > 0.1:
+                    print(f"Skipping {os.path.join(root, dir)} due to timeout")
+                    dirs.remove(dir)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Search for files and directories matching the target.")
-    parser.add_argument("target", help="The name of the file or directory to search for.")
-    parser.add_argument("--maxdepth", type=int, help="The maximum depth to search.")
-    args = parser.parse_args()
-    
-    search_filesystem(args.target, args.maxdepth)
+    if len(sys.argv) < 2:
+        print("Usage: search_filesystem.py <target> [--maxdepth <max_depth>]")
+        sys.exit(1)
+    target = sys.argv[1]
+    max_depth = int(sys.argv[3]) if '--maxdepth' in sys.argv else float('inf')
+    search_filesystem(target, max_depth)
 
